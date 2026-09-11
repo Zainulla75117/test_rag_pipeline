@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Knowledge Base</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Knowledge Base <span class="badge">AI</span></h1>
+            <p>Upload documents to build your custom RAG brain.</p>
+        </header>
+
+        <main>
+            <section class="upload-section glass-panel">
+                <h2>1. Add Knowledge</h2>
+                <div class="upload-area" id="drop-zone">
+                    <div class="upload-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    </div>
+                    <p>Drag & drop your files here or <span class="browse-btn">browse</span></p>
+                    <p class="file-types">Supports .txt, .csv, .pdf</p>
+                    <input type="file" id="file-input" multiple accept=".txt,.csv,.pdf,.db" hidden>
+                </div>
+                <div id="upload-status" class="status-container"></div>
+            </section>
+
+            <section class="chat-section glass-panel">
+                <h2>2. Ask Questions</h2>
+                <div class="chat-box" id="chat-box">
+                    <div class="message system-msg">
+                        Hello! I'm ready to answer questions based on the documents you've uploaded.
+                    </div>
+                </div>
+                
+                <div class="input-area">
+                    <input type="text" id="query-input" placeholder="Ask something about your documents..." autocomplete="off">
+                    <button id="send-btn" class="primary-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+    
+    <script src="/static/script.js"></script>
+</body>
+</html>

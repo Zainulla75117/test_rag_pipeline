@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Environment variables
+.env
+.env.local
+
+# Database / Chroma DB
+db/chroma_db/
+
+# Uploaded documents
+docs/*
+!docs/.gitkeep
+
+# OS generated files
+.DS_Store
+Thumbs.db
