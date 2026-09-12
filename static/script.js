@@ -66,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const stateEl = statusEl.querySelector('.state');
         const progressTextEl = statusEl.querySelector('.progress-text');
         const speedTextEl = statusEl.querySelector('.speed-text');
+        const progressBar = statusEl.querySelector('.progress-bar');
 
         cancelBtn.addEventListener('click', () => {
             xhr.abort();
@@ -77,15 +78,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.lengthComputable) {
                 const percentComplete = Math.round((e.loaded / e.total) * 100);
                 
+                progressBar.style.width = `${percentComplete}%`;
+                
                 if (percentComplete < 100) {
                     stateEl.innerText = `Uploading (${percentComplete}%)`;
                     
                     const currentTime = Date.now();
-                    const timeDiff = (currentTime - lastTime) / 1000; // in seconds
+                    const timeDiff = (currentTime - lastTime) / 1000;
                     
-                    if (timeDiff > 0.5) { // update speed every 0.5s
+                    if (timeDiff > 0.5) {
                         const bytesDiff = e.loaded - lastLoaded;
-                        const speed = bytesDiff / timeDiff; // bytes per second
+                        const speed = bytesDiff / timeDiff;
                         
                         progressTextEl.innerText = `${formatBytes(e.loaded)} / ${formatBytes(e.total)}`;
                         speedTextEl.innerText = `${formatBytes(speed)}/s`;
@@ -98,22 +101,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         xhr.upload.addEventListener('load', () => {
-            stateEl.innerText = 'Embedding in progress...';
-            progressTextEl.innerText = 'Generating embeddings and updating vector store...';
+            stateEl.innerText = 'Upload complete, waiting for processing...';
+            progressTextEl.innerText = '';
             speedTextEl.innerText = '';
+            progressBar.style.width = '100%';
         });
 
         xhr.addEventListener('load', () => {
             cancelBtn.style.display = 'none';
             if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                    const result = JSON.parse(xhr.responseText);
-                    updateStatus(statusEl, 'success', `Ingested (${result.chunks} chunks)`);
-                    progressTextEl.innerText = '';
-                    speedTextEl.innerText = '';
-                } catch (e) {
-                    updateStatus(statusEl, 'error', 'Invalid response');
-                }
+                // Upload finished, start polling processing status
+                updateStatus(statusEl, 'processing', 'Queued for processing...');
+                progressBar.style.width = '0%';
+                pollProcessingStatus(file.name, statusEl);
             } else {
                 try {
                     const result = JSON.parse(xhr.responseText);
@@ -132,6 +132,42 @@ document.addEventListener('DOMContentLoaded', () => {
         xhr.open('POST', '/upload', true);
         xhr.send(formData);
     }
+    
+    async function pollProcessingStatus(filename, statusEl) {
+        const stateEl = statusEl.querySelector('.state');
+        const progressBar = statusEl.querySelector('.progress-bar');
+        const progressTextEl = statusEl.querySelector('.progress-text');
+        
+        const pollInterval = setInterval(async () => {
+            try {
+                const res = await fetch(`/status/${encodeURIComponent(filename)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    
+                    if (data.status === 'processing' || data.status === 'queued') {
+                        progressBar.style.width = `${data.progress || 0}%`;
+                        stateEl.innerText = `Processing: ${data.progress || 0}%`;
+                        progressTextEl.innerText = data.message || 'Processing...';
+                    } else if (data.status === 'completed') {
+                        clearInterval(pollInterval);
+                        progressBar.style.width = '100%';
+                        updateStatus(statusEl, 'success', `Ingested (${data.chunks} chunks)`);
+                        progressTextEl.innerText = 'Ready';
+                    } else if (data.status === 'error') {
+                        clearInterval(pollInterval);
+                        updateStatus(statusEl, 'error', data.message || 'Processing failed');
+                    }
+                } else {
+                    if (res.status === 404) {
+                        clearInterval(pollInterval);
+                        updateStatus(statusEl, 'error', 'Task not found');
+                    }
+                }
+            } catch (err) {
+                console.error("Polling error:", err);
+            }
+        }, 1000);
+    }
 
     function createStatusElement(filename) {
         const el = document.createElement('div');
@@ -145,6 +181,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="status-details">
                     <span class="progress-text">Waiting...</span>
                     <span class="speed-text"></span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar"></div>
                 </div>
             </div>
             <button class="cancel-btn" title="Cancel upload">

@@ -81,10 +81,13 @@ def create_vector_store(chunks, persist_directory="db/chroma_db"):
     print(f"Vector store created and saved to {persist_directory}")
     return vectorstore
 
-def process_single_file(file_path: str, persist_directory="db/chroma_db"):
+def process_single_file(file_path: str, persist_directory="db/chroma_db", progress_callback=None):
     """Load, split and add a single file to ChromaDB"""
     print(f"Processing single file: {file_path}")
     
+    if progress_callback:
+        progress_callback(10, "Extracting text from document...")
+        
     ext = os.path.splitext(file_path)[1].lower()
     
     documents = []
@@ -136,10 +139,16 @@ def process_single_file(file_path: str, persist_directory="db/chroma_db"):
     if not documents:
         raise ValueError(f"No content found in {file_path}")
         
+    if progress_callback:
+        progress_callback(40, "Splitting document into chunks...")
+        
     chunks = split_documents(documents)
     
     if not chunks:
         raise ValueError(f"Failed to split documents for {file_path}")
+        
+    if progress_callback:
+        progress_callback(70, "Generating embeddings and storing in database...")
         
     embedding_model = get_embedding_model()
     
@@ -150,5 +159,8 @@ def process_single_file(file_path: str, persist_directory="db/chroma_db"):
     )
     
     vectorstore.add_documents(documents=chunks)
+    
+    if progress_callback:
+        progress_callback(100, "Processing complete")
     
     return len(chunks)

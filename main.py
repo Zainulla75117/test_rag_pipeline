@@ -1,10 +1,12 @@
 import os
 import shutil
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import uvicorn
+
+task_statuses = {}
 
 # Import existing logic (adapted)
 from modules.ingestion import process_single_file
@@ -44,8 +46,27 @@ async def get_index():
     with open("static/index.html", "r") as f:
         return f.read()
 
+def update_status(filename, percentage, message, chunks=0, error=None):
+    if error:
+        task_statuses[filename] = {"status": "error", "message": error}
+    elif percentage == 100:
+        task_statuses[filename] = {"status": "completed", "progress": 100, "message": message, "chunks": chunks}
+    else:
+        task_statuses[filename] = {"status": "processing", "progress": percentage, "message": message}
+
+def process_file_bg(file_path: str, filename: str):
+    def callback(percentage, message):
+        update_status(filename, percentage, message)
+        
+    try:
+        update_status(filename, 0, "Starting processing...")
+        num_chunks = process_single_file(file_path, progress_callback=callback)
+        update_status(filename, 100, "File ingested successfully", chunks=num_chunks)
+    except Exception as e:
+        update_status(filename, 0, str(e), error=str(e))
+
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
     
@@ -54,12 +75,17 @@ async def upload_file(file: UploadFile = File(...)):
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    try:
-        # Process the single file
-        num_chunks = process_single_file(file_path)
-        return {"filename": file.filename, "message": "File ingested successfully", "chunks": num_chunks}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # Start background task
+    task_statuses[file.filename] = {"status": "queued", "progress": 0, "message": "Queued for processing..."}
+    background_tasks.add_task(process_file_bg, file_path, file.filename)
+    
+    return {"filename": file.filename, "message": "Upload complete, processing in background"}
+
+@app.get("/status/{filename}")
+async def get_status(filename: str):
+    if filename not in task_statuses:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task_statuses[filename]
 
 @app.post("/query")
 async def query_rag(request: QueryRequest):
