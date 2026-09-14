@@ -1,5 +1,6 @@
 import os
 import shutil
+import gc
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
@@ -28,15 +29,28 @@ os.makedirs("db/chroma_db", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 persistent_directory = "db/chroma_db"
+
+# Singleton instances — created once, reused across all requests
 embedding_model = get_embedding_model()
 llm_model = ChatGoogleGenerativeAI(model="gemini-3.7-flash")
 
+# Singleton Chroma DB — avoids creating a new client per /query request
+_db_instance = None
+
 def get_db():
-    return Chroma(
-        persist_directory=persistent_directory,
-        embedding_function=embedding_model,
-        collection_metadata={"hnsw:space": "cosine"}
-    )
+    global _db_instance
+    if _db_instance is None:
+        _db_instance = Chroma(
+            persist_directory=persistent_directory,
+            embedding_function=embedding_model,
+            collection_metadata={"hnsw:space": "cosine"}
+        )
+    return _db_instance
+
+def reset_db():
+    """Reset the cached DB instance (call after ingestion so new docs are visible)."""
+    global _db_instance
+    _db_instance = None
 
 class QueryRequest(BaseModel):
     query: str
@@ -62,8 +76,15 @@ def process_file_bg(file_path: str, filename: str):
         update_status(filename, 0, "Starting processing...")
         num_chunks = process_single_file(file_path, progress_callback=callback)
         update_status(filename, 100, "File ingested successfully", chunks=num_chunks)
+        # Invalidate cached DB so next query sees the new documents
+        reset_db()
+        # Hint GC after heavy processing
+        gc.collect()
     except Exception as e:
         update_status(filename, 0, str(e), error=str(e))
+
+# Size of the read buffer for streaming uploads to disk (64 KB)
+_UPLOAD_CHUNK_SIZE = 64 * 1024
 
 @app.post("/upload")
 async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
@@ -71,9 +92,10 @@ async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File
         raise HTTPException(status_code=400, detail="No filename provided")
     
     file_path = os.path.join("docs", file.filename)
-    
+
+    # Stream file to disk in 64 KB chunks instead of reading entire file into memory
     with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        shutil.copyfileobj(file.file, buffer, length=_UPLOAD_CHUNK_SIZE)
         
     # Start background task
     task_statuses[file.filename] = {"status": "queued", "progress": 0, "message": "Queued for processing..."}
@@ -86,6 +108,14 @@ async def get_status(filename: str):
     if filename not in task_statuses:
         raise HTTPException(status_code=404, detail="Task not found")
     return task_statuses[filename]
+
+@app.delete("/status/{filename}")
+async def clear_status(filename: str):
+    """Remove a completed/errored task status to free memory."""
+    removed = task_statuses.pop(filename, None)
+    if removed is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"message": f"Status for '{filename}' cleared"}
 
 @app.post("/query")
 async def query_rag(request: QueryRequest):

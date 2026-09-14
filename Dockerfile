@@ -6,6 +6,10 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 # Prevents Python from buffering stdout and stderr
 ENV PYTHONUNBUFFERED=1
+# Encourage glibc to return freed memory to the OS
+ENV MALLOC_TRIM_THRESHOLD_=65536
+# Use the system allocator for more efficient large allocations
+ENV PYTHONMALLOC=malloc
 
 # Set the working directory inside the container
 WORKDIR /app

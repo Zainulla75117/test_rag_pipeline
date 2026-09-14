@@ -5,6 +5,10 @@ from langchain_text_splitters import CharacterTextSplitter
 from langchain_chroma import Chroma
 from modules.embedding_config import get_embedding_model
 import os
+import gc
+
+# Batch size for adding documents to the vector store — controls peak memory
+EMBED_BATCH_SIZE = 50
 
 def load_documents(docs_path="docs"):
     """Load all text files from the docs directory"""
@@ -62,20 +66,30 @@ def split_documents(documents, chunk_size=1000, chunk_overlap=100):
     
     return chunks
 
+def _add_documents_in_batches(vectorstore, chunks, batch_size=EMBED_BATCH_SIZE):
+    """Add documents to the vector store in memory-friendly batches."""
+    total = len(chunks)
+    for start in range(0, total, batch_size):
+        batch = chunks[start : start + batch_size]
+        vectorstore.add_documents(documents=batch)
+        print(f"  Added batch {start // batch_size + 1} ({min(start + batch_size, total)}/{total} chunks)")
+    # Hint the GC to reclaim batch temporaries
+    gc.collect()
+
 def create_vector_store(chunks, persist_directory="db/chroma_db"):
     """Create and persist ChromaDB vector store"""
     print("Creating embeddings and storing in ChromaDB...")
         
     embedding_model = get_embedding_model()
     
-    # Create ChromaDB vector store
+    # Create ChromaDB vector store using batched inserts
     print("--- Creating vector store ---")
-    vectorstore = Chroma.from_documents(
-        documents=chunks,
-        embedding=embedding_model,
-        persist_directory=persist_directory, 
+    vectorstore = Chroma(
+        persist_directory=persist_directory,
+        embedding_function=embedding_model,
         collection_metadata={"hnsw:space": "cosine"}
     )
+    _add_documents_in_batches(vectorstore, chunks)
     print("--- Finished creating vector store ---")
     
     print(f"Vector store created and saved to {persist_directory}")
@@ -143,13 +157,18 @@ def process_single_file(file_path: str, persist_directory="db/chroma_db", progre
         progress_callback(40, "Splitting document into chunks...")
         
     chunks = split_documents(documents)
+
+    # Free the raw documents — we only need chunks from here on
+    del documents
+    gc.collect()
     
     if not chunks:
         raise ValueError(f"Failed to split documents for {file_path}")
         
     if progress_callback:
         progress_callback(70, "Generating embeddings and storing in database...")
-        
+
+    # Reuse the singleton embedding model — no new instantiation
     embedding_model = get_embedding_model()
     
     vectorstore = Chroma(
@@ -158,9 +177,15 @@ def process_single_file(file_path: str, persist_directory="db/chroma_db", progre
         collection_metadata={"hnsw:space": "cosine"}
     )
     
-    vectorstore.add_documents(documents=chunks)
+    _add_documents_in_batches(vectorstore, chunks)
+
+    num_chunks = len(chunks)
+
+    # Free chunks and hint GC
+    del chunks
+    gc.collect()
     
     if progress_callback:
         progress_callback(100, "Processing complete")
     
-    return len(chunks)
+    return num_chunks

@@ -6,7 +6,6 @@ from langchain_chroma import Chroma
 
 load_dotenv()
 
-embedding_model = get_embedding_model()
 
 def main():
     """Main ingestion pipeline"""
@@ -19,6 +18,9 @@ def main():
     # Check if vector store already exists
     if os.path.exists(persistent_directory):
         print("[SUCCESS] Vector store already exists. No need to re-process documents.")
+
+        # Lazy init — only create embedding model when actually needed
+        embedding_model = get_embedding_model()
         
         vectorstore = Chroma(
             persist_directory=persistent_directory,
