@@ -1,7 +1,7 @@
 from langchain_chroma import Chroma
 from modules.embedding_config import get_embedding_model
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_aws import ChatBedrock
 from langchain_core.messages import HumanMessage, SystemMessage
 
 
@@ -11,8 +11,8 @@ persistent_directory = "db/chroma_db"
 
 # Load embeddings and vector store
 embedding_model = get_embedding_model()
-# Create a Gemini model
-model = ChatGoogleGenerativeAI(model="gemini-3.7-flash")
+# Create a Bedrock model
+model = ChatBedrock(model_id="global.anthropic.claude-haiku-4-5-20251001-v1:0")
 
 db = Chroma(
     persist_directory=persistent_directory,

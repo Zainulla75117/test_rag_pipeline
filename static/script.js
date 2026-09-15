@@ -259,11 +259,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const el = document.createElement('div');
         el.className = `message ${className}`;
         
-        // Simple markdown parsing for the bot's response (bold and newlines)
-        let formattedText = text.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>');
-        formattedText = formattedText.replace(/\\n/g, '<br>');
+        if (className.includes('user-msg')) {
+            el.textContent = text;
+        } else {
+            el.innerHTML = marked ? marked.parse(text) : text;
+        }
         
-        el.innerHTML = formattedText;
         chatBox.appendChild(el);
         scrollToBottom();
     }
@@ -272,10 +273,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const el = document.createElement('div');
         el.className = 'message bot-msg';
         
-        let formattedText = text.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>');
-        formattedText = formattedText.replace(/\\n/g, '<br>');
+        let formattedText = marked ? marked.parse(text) : text;
         
-        let html = `<div>${formattedText}</div>`;
+        let html = `<div class="markdown-body">${formattedText}</div>`;
         
         if (sources && sources.length > 0) {
             const uniqueSources = [...new Set(sources.map(s => s.source))];

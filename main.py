@@ -12,7 +12,7 @@ task_statuses = {}
 # Import existing logic (adapted)
 from modules.ingestion import process_single_file
 from langchain_chroma import Chroma
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_aws import ChatBedrock
 from modules.embedding_config import get_embedding_model
 from langchain_core.messages import HumanMessage, SystemMessage
 from dotenv import load_dotenv
@@ -32,7 +32,7 @@ persistent_directory = "db/chroma_db"
 
 # Singleton instances — created once, reused across all requests
 embedding_model = get_embedding_model()
-llm_model = ChatGoogleGenerativeAI(model="gemini-3.7-flash")
+llm_model = ChatBedrock(model_id="global.anthropic.claude-haiku-4-5-20251001-v1:0")
 
 # Singleton Chroma DB — avoids creating a new client per /query request
 _db_instance = None
